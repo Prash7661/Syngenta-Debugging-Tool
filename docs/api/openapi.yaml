@@ -1,0 +1,771 @@
+openapi: 3.0.3
+info:
+  title: SFMC Development Suite API
+  description: |
+    The Syngenta SFMC Development Suite API provides AI-powered development tools for Salesforce Marketing Cloud developers.
+    
+    ## Features
+    - AI-powered code generation for SQL, AMPScript, SSJS, CSS, and HTML
+    - Advanced debugging and code analysis
+    - Cloud pages generation with responsive design
+    - SFMC integration with OAuth 2.0 authentication
+    - Session management and caching
+    
+    ## Authentication
+    Most endpoints require authentication via session tokens. Use the `/api/session` endpoint to establish a session.
+    
+    ## Rate Limiting
+    API calls are rate-limited to prevent abuse. Current limits:
+    - 100 requests per minute for authenticated users
+    - 20 requests per minute for unauthenticated users
+    
+  version: 1.0.0
+  contact:
+    name: SFMC Development Suite Support
+    email: support@syngenta.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://sfmc-dev-suite-staging.syngenta.com
+    description: Staging server
+  - url: https://sfmc-dev-suite.syngenta.com
+    description: Production server
+
+paths:
+  /api/generate-code:
+    post:
+      summary: Generate code using AI
+      description: |
+        Generate code snippets or complete solutions using AI for various languages supported by SFMC.
+        Supports conversation history for context-aware generation.
+      tags:
+        - Code Generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeGenerationRequest'
+            examples:
+              ampscript_example:
+                summary: AMPScript generation
+                value:
+                  prompt: "Create an AMPScript function to format a phone number"
+                  language: "ampscript"
+                  conversationHistory: []
+              sql_example:
+                summary: SQL query generation
+                value:
+                  prompt: "Write a SQL query to find customers who haven't opened emails in 30 days"
+                  language: "sql"
+                  conversationHistory: []
+      responses:
+        '200':
+          description: Code generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeGenerationResponse'
+              examples:
+                success_response:
+                  summary: Successful code generation
+                  value:
+                    response: "Here's an AMPScript function to format phone numbers..."
+                    codeBlocks:
+                      - language: "ampscript"
+                        code: "%%[\n  SET @phone = RequestParameter('phone')\n  SET @formatted = FormatPhoneNumber(@phone)\n]%%"
+                        explanation: "This function formats a phone number parameter"
+                    suggestions:
+                      - "Consider adding validation for empty phone numbers"
+                    executionTime: 1.2
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimit'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/debug-code:
+    post:
+      summary: Debug and analyze code
+      description: |
+        Analyze code for syntax errors, performance issues, and best practice violations.
+        Supports multiple languages and provides detailed feedback with fix suggestions.
+      tags:
+        - Code Analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebugRequest'
+            examples:
+              ampscript_debug:
+                summary: Debug AMPScript code
+                value:
+                  code: "%%[ SET @email = RequestParameter('email') ]%%"
+                  language: "ampscript"
+                  analysisLevel: "all"
+              sql_debug:
+                summary: Debug SQL query
+                value:
+                  code: "SELECT * FROM customers WHERE email LIKE '%@gmail.com'"
+                  language: "sql"
+                  analysisLevel: "performance"
+      responses:
+        '200':
+          description: Code analysis completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/generate-pages:
+    post:
+      summary: Generate cloud pages
+      description: |
+        Generate responsive SFMC cloud pages based on configuration.
+        Supports JSON/YAML configuration with pre-built templates.
+      tags:
+        - Cloud Pages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PageGenerationRequest'
+      responses:
+        '200':
+          description: Pages generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageGenerationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/sfmc/authenticate:
+    post:
+      summary: Authenticate with SFMC
+      description: |
+        Establish OAuth 2.0 connection with Salesforce Marketing Cloud.
+        Returns access and refresh tokens for subsequent API calls.
+      tags:
+        - SFMC Integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SFMCAuthRequest'
+            examples:
+              auth_example:
+                summary: SFMC authentication
+                value:
+                  clientId: "your-client-id"
+                  clientSecret: "your-client-secret"
+                  subdomain: "your-subdomain"
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SFMCAuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/sfmc/data-extensions:
+    get:
+      summary: Get SFMC data extensions
+      description: |
+        Retrieve list of data extensions from connected SFMC instance.
+        Requires valid SFMC authentication.
+      tags:
+        - SFMC Integration
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of data extensions to return
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          description: Number of data extensions to skip
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Data extensions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExtensionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/sfmc/deploy:
+    post:
+      summary: Deploy cloud page to SFMC
+      description: |
+        Deploy generated cloud page to connected SFMC instance.
+        Requires valid SFMC authentication and proper permissions.
+      tags:
+        - SFMC Integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentRequest'
+      responses:
+        '200':
+          description: Deployment successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/session:
+    post:
+      summary: Create user session
+      description: |
+        Create a new user session for maintaining state across requests.
+        Sessions include conversation history and user preferences.
+      tags:
+        - Session Management
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreateRequest'
+      responses:
+        '200':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      summary: Get current session
+      description: Get current session information including preferences and history.
+      tags:
+        - Session Management
+      responses:
+        '200':
+          description: Session information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          description: Session not found
+
+  /api/health:
+    get:
+      summary: Health check
+      description: Check system health and availability
+      tags:
+        - System
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    CodeGenerationRequest:
+      type: object
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          description: The code generation prompt
+          example: "Create a function to validate email addresses"
+        language:
+          $ref: '#/components/schemas/CodeLanguage'
+        image:
+          type: string
+          format: base64
+          description: Optional image for visual code generation
+        conversationHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        context:
+          $ref: '#/components/schemas/SFMCContext'
+
+    CodeGenerationResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          description: AI-generated response with code explanation
+        codeBlocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CodeBlock'
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: Additional suggestions for improvement
+        executionTime:
+          type: number
+          description: Time taken to generate response in seconds
+
+    DebugRequest:
+      type: object
+      required:
+        - code
+        - language
+      properties:
+        code:
+          type: string
+          description: Code to analyze
+        language:
+          $ref: '#/components/schemas/DebugLanguage'
+        analysisLevel:
+          type: string
+          enum: [syntax, performance, security, all]
+          default: all
+        conversationHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebugMessage'
+
+    DebugResponse:
+      type: object
+      properties:
+        analysis:
+          type: string
+          description: Detailed analysis explanation
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebugError'
+        fixedCode:
+          type: string
+          description: Corrected code if fixes are available
+        optimizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptimizationSuggestion'
+        performanceScore:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Performance score out of 100
+
+    PageGenerationRequest:
+      type: object
+      required:
+        - configuration
+      properties:
+        configuration:
+          $ref: '#/components/schemas/PageConfiguration'
+        template:
+          type: string
+          description: Template name to use
+        customComponents:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomComponent'
+
+    PageGenerationResponse:
+      type: object
+      properties:
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedPage'
+        codeResources:
+          type: array
+          items:
+            $ref: '#/components/schemas/CodeResource'
+        integrationNotes:
+          type: string
+        testingGuidelines:
+          type: string
+        deploymentInstructions:
+          type: string
+
+    SFMCAuthRequest:
+      type: object
+      required:
+        - clientId
+        - clientSecret
+        - subdomain
+      properties:
+        clientId:
+          type: string
+          description: SFMC application client ID
+        clientSecret:
+          type: string
+          description: SFMC application client secret
+        subdomain:
+          type: string
+          description: SFMC instance subdomain
+
+    SFMCAuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: OAuth access token
+        refreshToken:
+          type: string
+          description: OAuth refresh token
+        expiresIn:
+          type: integer
+          description: Token expiration time in seconds
+        tokenType:
+          type: string
+          example: "Bearer"
+
+    DataExtensionResponse:
+      type: object
+      properties:
+        dataExtensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataExtension'
+        totalCount:
+          type: integer
+          description: Total number of data extensions
+
+    DeploymentRequest:
+      type: object
+      required:
+        - page
+      properties:
+        page:
+          $ref: '#/components/schemas/GeneratedPage'
+        deploymentOptions:
+          $ref: '#/components/schemas/DeploymentOptions'
+
+    DeploymentResponse:
+      type: object
+      properties:
+        deploymentId:
+          type: string
+        status:
+          type: string
+          enum: [success, failed, pending]
+        url:
+          type: string
+          description: URL of deployed page
+        errors:
+          type: array
+          items:
+            type: string
+
+    # Supporting schemas
+    CodeLanguage:
+      type: string
+      enum: [sql, ampscript, ssjs, css, html, javascript]
+
+    DebugLanguage:
+      type: string
+      enum: [sql, ampscript, ssjs, css, html]
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        image:
+          type: string
+        timestamp:
+          type: integer
+        metadata:
+          type: object
+
+    CodeBlock:
+      type: object
+      properties:
+        language:
+          type: string
+        code:
+          type: string
+        explanation:
+          type: string
+
+    DebugError:
+      type: object
+      properties:
+        line:
+          type: integer
+        column:
+          type: integer
+        severity:
+          type: string
+          enum: [error, warning, info]
+        message:
+          type: string
+        rule:
+          type: string
+        fixSuggestion:
+          type: string
+
+    OptimizationSuggestion:
+      type: object
+      properties:
+        type:
+          type: string
+        description:
+          type: string
+        impact:
+          type: string
+          enum: [high, medium, low]
+        effort:
+          type: string
+          enum: [high, medium, low]
+
+    PageConfiguration:
+      type: object
+      properties:
+        pageSettings:
+          type: object
+          properties:
+            pageName:
+              type: string
+            publishedURL:
+              type: string
+            pageType:
+              type: string
+        codeResources:
+          type: object
+        advancedOptions:
+          type: object
+
+    GeneratedPage:
+      type: object
+      properties:
+        name:
+          type: string
+        content:
+          type: string
+        type:
+          type: string
+        metadata:
+          type: object
+
+    CodeResource:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        content:
+          type: string
+
+    DataExtension:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        fields:
+          type: array
+          items:
+            type: object
+
+    SFMCContext:
+      type: object
+      properties:
+        dataExtensions:
+          type: array
+          items:
+            type: string
+        businessUnits:
+          type: array
+          items:
+            type: string
+
+    DebugMessage:
+      type: object
+      properties:
+        code:
+          type: string
+        analysis:
+          type: string
+        timestamp:
+          type: integer
+
+    CustomComponent:
+      type: object
+      properties:
+        name:
+          type: string
+        template:
+          type: string
+        props:
+          type: object
+
+    DeploymentOptions:
+      type: object
+      properties:
+        businessUnit:
+          type: string
+        folder:
+          type: string
+        overwrite:
+          type: boolean
+
+    SessionCreateRequest:
+      type: object
+      properties:
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+
+    SessionResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+        conversationHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+
+    UserPreferences:
+      type: object
+      properties:
+        defaultLanguage:
+          $ref: '#/components/schemas/CodeLanguage'
+        debugLevel:
+          type: string
+          enum: [basic, advanced, comprehensive]
+        theme:
+          type: string
+          enum: [light, dark, system]
+        autoSave:
+          type: boolean
+        codeFormatting:
+          type: object
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        services:
+          type: object
+          additionalProperties:
+            type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "VALIDATION_ERROR"
+            message: "Invalid request parameters"
+            code: "400"
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "AUTHENTICATION_ERROR"
+            message: "Valid authentication required"
+            code: "401"
+
+    RateLimit:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "RATE_LIMIT_ERROR"
+            message: "Rate limit exceeded. Try again later."
+            code: "429"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "INTERNAL_SERVER_ERROR"
+            message: "An unexpected error occurred"
+            code: "500"
+
+tags:
+  - name: Code Generation
+    description: AI-powered code generation endpoints
+  - name: Code Analysis
+    description: Code debugging and analysis endpoints
+  - name: Cloud Pages
+    description: Cloud page generation endpoints
+  - name: SFMC Integration
+    description: Salesforce Marketing Cloud integration endpoints
+  - name: Session Management
+    description: User session and state management endpoints
+  - name: System
+    description: System health and monitoring endpoints

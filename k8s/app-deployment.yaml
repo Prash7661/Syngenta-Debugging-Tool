@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sfmc-dev-suite-deployment
+  namespace: sfmc-development-suite
+  labels:
+    app: sfmc-dev-suite
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: sfmc-dev-suite
+  template:
+    metadata:
+      labels:
+        app: sfmc-dev-suite
+    spec:
+      containers:
+      - name: sfmc-dev-suite
+        image: sfmc-development-suite:latest
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: sfmc-dev-suite-config
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: OPENAI_API_KEY
+        - name: SFMC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: SFMC_CLIENT_ID
+        - name: SFMC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: SFMC_CLIENT_SECRET
+        - name: SFMC_SUBDOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: SFMC_SUBDOMAIN
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: SESSION_SECRET
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: ENCRYPTION_KEY
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sfmc-dev-suite-secrets
+              key: REDIS_PASSWORD
+        - name: SFMC_AUTH_BASE_URL
+          value: "https://$(SFMC_SUBDOMAIN).auth.marketingcloudapis.com"
+        - name: SFMC_REST_BASE_URL
+          value: "https://$(SFMC_SUBDOMAIN).rest.marketingcloudapis.com"
+        - name: SFMC_SOAP_BASE_URL
+          value: "https://$(SFMC_SUBDOMAIN).soap.marketingcloudapis.com"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health/live
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health/ready
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sfmc-dev-suite-service
+  namespace: sfmc-development-suite
+  labels:
+    app: sfmc-dev-suite
+spec:
+  selector:
+    app: sfmc-dev-suite
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+    name: http
+  - protocol: TCP
+    port: 9090
+    targetPort: 9090
+    name: metrics
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sfmc-dev-suite-ingress
+  namespace: sfmc-development-suite
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - sfmc-dev-suite.yourdomain.com
+    secretName: sfmc-dev-suite-tls
+  rules:
+  - host: sfmc-dev-suite.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sfmc-dev-suite-service
+            port:
+              number: 80

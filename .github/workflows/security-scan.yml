@@ -1,0 +1,205 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Run weekly on Monday at 3 AM
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'package*.json'
+      - 'Dockerfile*'
+      - '.github/workflows/**'
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run npm audit
+      run: |
+        npm audit --audit-level=moderate --json > npm-audit-results.json || true
+        npm audit --audit-level=moderate
+
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      continue-on-error: true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=medium --json > snyk-results.json
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-results
+        path: |
+          npm-audit-results.json
+          snyk-results.json
+        retention-days: 30
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Docker image for scanning
+      run: |
+        docker build -t ${{ env.IMAGE_NAME }}:security-scan .
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.IMAGE_NAME }}:security-scan
+        format: 'json'
+        output: 'trivy-results.json'
+
+    - name: Run Trivy filesystem scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'json'
+        output: 'trivy-fs-results.json'
+
+    - name: Upload container scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: container-scan-results
+        path: |
+          trivy-results.json
+          trivy-fs-results.json
+        retention-days: 30
+
+  code-scan:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: javascript
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+
+    - name: Run ESLint security scan
+      run: |
+        npx eslint . --ext .js,.jsx,.ts,.tsx --format json > eslint-results.json || true
+
+    - name: Upload code scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: code-scan-results
+        path: |
+          eslint-results.json
+        retention-days: 30
+
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run TruffleHog
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, container-scan, code-scan, secrets-scan]
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+
+    - name: Generate security report
+      run: |
+        echo "# Security Scan Report" > security-report.md
+        echo "Generated on: $(date)" >> security-report.md
+        echo "" >> security-report.md
+        
+        echo "## Dependency Scan Results" >> security-report.md
+        if [ -f security-scan-results/npm-audit-results.json ]; then
+          echo "NPM Audit found issues. Check artifacts for details." >> security-report.md
+        else
+          echo "No dependency vulnerabilities found." >> security-report.md
+        fi
+        echo "" >> security-report.md
+        
+        echo "## Container Scan Results" >> security-report.md
+        if [ -f container-scan-results/trivy-results.json ]; then
+          echo "Container vulnerabilities detected. Check artifacts for details." >> security-report.md
+        else
+          echo "No container vulnerabilities found." >> security-report.md
+        fi
+        echo "" >> security-report.md
+        
+        echo "## Code Analysis Results" >> security-report.md
+        if [ -f code-scan-results/eslint-results.json ]; then
+          echo "Static analysis completed. Check artifacts for details." >> security-report.md
+        else
+          echo "No static analysis issues found." >> security-report.md
+        fi
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: security-report.md
+        retention-days: 90
+
+    - name: Create issue for security findings
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = `Security Scan Findings - ${new Date().toISOString().split('T')[0]}`;
+          const body = `Automated security scan has detected potential issues.
+          
+          Please review the security scan artifacts and address any critical or high severity findings.
+          
+          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['security', 'automated']
+          });

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sfmc-development-suite
+  labels:
+    name: sfmc-development-suite
+    environment: production

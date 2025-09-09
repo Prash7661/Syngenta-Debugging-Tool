@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sfmc-dev-suite-config
+  namespace: sfmc-development-suite
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  HOSTNAME: "0.0.0.0"
+  REDIS_URL: "redis://redis-service:6379"
+  REDIS_DB: "0"
+  SESSION_TIMEOUT: "3600000"
+  ENCRYPTION_ALGORITHM: "aes-256-gcm"
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  LOG_LEVEL: "info"
+  HEALTH_CHECK_TIMEOUT: "5000"
+  HEALTH_CHECK_INTERVAL: "30000"
+  MEMORY_LIMIT_MB: "1024"
+  MIN_UPTIME_SECONDS: "30"
